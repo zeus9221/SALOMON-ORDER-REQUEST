@@ -689,10 +689,6 @@ function buildReview() {
 }
 
 // ── SUBMIT ────────────────────────────────────────────────────────────────────
-// ── Google Apps Script 웹 앱 URL ─────────────────────────────────────────────
-// 배포 후 아래 URL을 교체해주세요
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwmXoprmn0ihLkhbHGVV9O9IlkG5BAZm_c-8t4216RkP3pMsCnFpYx0aPSOd299oH2r6g/exec';
-
 async function submitOrder() {
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.textContent = '제출 중...';
