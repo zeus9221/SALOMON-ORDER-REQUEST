@@ -747,7 +747,7 @@ body{background:var(--bg);color:var(--black);font-family:var(--sans);min-height:
 </div>
 
 <script>
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRWAtDck3eSJ7a-pdhPI21ghxhCEfChq7lHLnj5xOsnCXRAK_PELKYI7zYYSdg39VgAA-8t4216RkP3pMsCnFpYx0aPSOd299oH2r6g/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzRWAtDck3eSJ7a-pdhPI21ghxhCEfChq7lHLnj5xOsnCXRAK_PELKYI7zYYSdg39VgAA/exec';
 
 let allOrders = [];
 let stockCache = {};
@@ -772,7 +772,7 @@ async function loadOrders() {
   document.getElementById('orders-empty').style.display = 'none';
 
   try {
-    const res  = await fetch(SCRIPT_URL + '?action=orders');
+    const res  = await fetch(SCRIPT_URL + '?action=orders', { method: 'GET', mode: 'cors' });
     const json = await res.json();
     if (json.status !== 'ok') throw new Error(json.message);
 
@@ -1437,6 +1437,6 @@ document.getElementById('modal').addEventListener('click', e => {
 
 init();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>
 </html>
