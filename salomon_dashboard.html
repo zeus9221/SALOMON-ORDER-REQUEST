@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SALOMON — 출고 관리 대시보드</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f3f0;
+  --white: #ffffff;
+  --black: #111111;
+  --gray1: #222222;
+  --gray2: #555555;
+  --gray3: #999999;
+  --gray4: #cccccc;
+  --gray5: #e8e8e8;
+  --border: #e0deda;
+  --green: #1a6b3a;
+  --green-bg: #eaf4ee;
+  --yellow: #7a5c00;
+  --yellow-bg: #fef9e7;
+  --red: #c0200a;
+  --red-bg: #fdecea;
+  --blue: #1a4fa0;
+  --blue-bg: #eef2fb;
+  --mono: "DM Mono", monospace;
+  --sans: "Noto Sans KR", sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:14px;}
+body{background:var(--bg);color:var(--black);font-family:var(--sans);min-height:100vh;}
+
+/* ── LAYOUT ── */
+.app { display:grid; grid-template-columns:220px 1fr; min-height:100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background:var(--black);
+  display:flex; flex-direction:column;
+  position:sticky; top:0; height:100vh;
+  overflow-y:auto;
+}
+.sidebar-logo {
+  padding:24px 20px 20px;
+  border-bottom:1px solid #2a2a2a;
+}
+.sidebar-logo img { height:22px; display:block; }
+.sidebar-logo .sys-label {
+  font-family:var(--mono); font-size:9px; letter-spacing:2px;
+  color:#555; margin-top:8px; text-transform:uppercase;
+}
+.nav-section { padding:16px 0 8px; }
+.nav-label {
+  font-family:var(--mono); font-size:9px; letter-spacing:2px;
+  color:#444; text-transform:uppercase; padding:0 20px 8px;
+}
+.nav-item {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 20px; cursor:pointer;
+  font-size:13px; color:#888;
+  transition:all .15s; border-left:2px solid transparent;
+}
+.nav-item:hover { color:#fff; background:#1a1a1a; }
+.nav-item.active { color:#fff; border-left-color:#fff; background:#1a1a1a; }
+.nav-item .nav-icon { font-size:14px; width:18px; text-align:center; }
+.nav-badge {
+  margin-left:auto; background:#333; color:#aaa;
+  font-family:var(--mono); font-size:9px; padding:2px 6px; border-radius:10px;
+}
+.nav-item.active .nav-badge { background:#444; color:#fff; }
+.sidebar-footer {
+  margin-top:auto; padding:16px 20px;
+  border-top:1px solid #1e1e1e;
+  font-family:var(--mono); font-size:10px; color:#444; letter-spacing:1px;
+}
+
+/* ── MAIN ── */
+.main { display:flex; flex-direction:column; overflow:hidden; }
+
+/* ── TOPBAR ── */
+.topbar {
+  background:var(--white);
+  border-bottom:1px solid var(--border);
+  padding:0 32px;
+  height:56px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; z-index:50;
+}
+.topbar-title { font-size:16px; font-weight:700; letter-spacing:.5px; }
+.topbar-right { display:flex; align-items:center; gap:16px; }
+.topbar-date { font-family:var(--mono); font-size:11px; color:var(--gray3); }
+.btn-refresh {
+  display:flex; align-items:center; gap:6px;
+  background:none; border:1px solid var(--border);
+  padding:7px 14px; border-radius:4px;
+  font-family:var(--mono); font-size:10px; letter-spacing:1px;
+  cursor:pointer; color:var(--gray2); transition:all .15s;
+}
+.btn-refresh:hover { border-color:var(--black); color:var(--black); }
+
+/* ── CONTENT ── */
+.content { padding:28px 32px; flex:1; overflow-y:auto; }
+
+/* ── PANELS ── */
+.panel { display:none; }
+.panel.active { display:block; }
+
+/* ── STATS ROW ── */
+.stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+.stat-card {
+  background:var(--white); border:1px solid var(--border);
+  border-radius:6px; padding:18px 20px;
+}
+.stat-label { font-family:var(--mono); font-size:9px; letter-spacing:2px; color:var(--gray3); text-transform:uppercase; margin-bottom:8px; }
+.stat-num { font-size:28px; font-weight:700; line-height:1; color:var(--black); }
+.stat-sub { font-family:var(--mono); font-size:10px; color:var(--gray3); margin-top:5px; }
+.stat-card.green .stat-num { color:var(--green); }
+.stat-card.red .stat-num { color:var(--red); }
+.stat-card.yellow .stat-num { color:var(--yellow); }
+
+/* ── SECTION HEADER ── */
+.section-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:16px;
+}
+.section-hdr h2 { font-size:15px; font-weight:700; }
+.section-hdr .hint { font-family:var(--mono); font-size:10px; color:var(--gray3); }
+
+/* ── ORDER TABLE ── */
+.table-wrap { background:var(--white); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+.data-table { width:100%; border-collapse:collapse; font-size:12px; }
+.data-table th {
+  background:#f8f7f5; font-family:var(--mono); font-size:9px; letter-spacing:1.5px;
+  color:var(--gray3); text-transform:uppercase; padding:10px 14px; text-align:left;
+  border-bottom:1px solid var(--border); white-space:nowrap;
+}
+.data-table td {
+  padding:11px 14px; border-bottom:1px solid var(--border);
+  color:var(--black); vertical-align:middle;
+}
+.data-table tr:last-child td { border-bottom:none; }
+.data-table tr:hover td { background:#fafaf8; }
+.td-mono { font-family:var(--mono); font-size:11px; color:var(--gray2); }
+.td-name { font-weight:500; }
+.td-code { font-family:var(--mono); font-size:10px; color:var(--gray3); }
+
+/* ── STATUS BADGE ── */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-family:var(--mono); font-size:9px; letter-spacing:1px;
+  padding:3px 8px; border-radius:3px; white-space:nowrap;
+  text-transform:uppercase;
+}
+.badge.possible   { background:var(--green-bg);  color:var(--green); }
+.badge.impossible { background:var(--red-bg);    color:var(--red);   }
+.badge.pending    { background:var(--yellow-bg); color:var(--yellow);}
+.badge.checking   { background:var(--gray5);     color:var(--gray3); }
+.badge.mkt        { background:#111; color:#fff; }
+.badge.cj         { background:#e8f0fe; color:var(--blue); }
+.badge.retail     { background:#e8f5e9; color:var(--green); }
+.badge.online     { background:#fff8e1; color:#8c6900; }
+.badge.store      { background:#f3e5f5; color:#6a1b9a; }
+.badge.wholesale  { background:var(--gray5); color:var(--gray2); }
+
+/* ── CHECK PANEL ── */
+.check-form {
+  background:var(--white); border:1px solid var(--border);
+  border-radius:6px; padding:24px; margin-bottom:24px;
+}
+.check-form-grid { display:grid; grid-template-columns:2fr 1fr 1fr 1fr auto; gap:12px; align-items:end; }
+.form-field label { display:block; font-family:var(--mono); font-size:9px; letter-spacing:2px; color:var(--gray3); text-transform:uppercase; margin-bottom:6px; }
+.form-field input, .form-field select {
+  width:100%; padding:9px 12px; border:1px solid var(--border);
+  border-radius:4px; font-family:var(--sans); font-size:13px;
+  color:var(--black); outline:none; background:white; transition:border-color .15s;
+}
+.form-field input:focus, .form-field select:focus { border-color:var(--black); }
+.btn-check {
+  padding:9px 20px; background:var(--black); color:white;
+  border:none; border-radius:4px; font-family:var(--mono);
+  font-size:10px; letter-spacing:2px; cursor:pointer; transition:all .15s;
+  white-space:nowrap;
+}
+.btn-check:hover { background:#333; }
+
+/* ── STOCK RESULT ── */
+.stock-result { display:none; }
+.stock-result.show { display:block; }
+
+.result-hero {
+  background:var(--white); border:1px solid var(--border);
+  border-radius:6px; padding:24px; margin-bottom:16px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.result-product { flex:1; }
+.result-product .rp-name { font-size:17px; font-weight:700; margin-bottom:4px; }
+.result-product .rp-meta { font-family:var(--mono); font-size:11px; color:var(--gray3); }
+.result-verdict {
+  text-align:right;
+}
+.verdict-badge {
+  display:inline-block; padding:8px 20px; border-radius:4px;
+  font-size:14px; font-weight:700; letter-spacing:1px; margin-bottom:6px;
+}
+.verdict-badge.ok  { background:var(--green-bg); color:var(--green); }
+.verdict-badge.ng  { background:var(--red-bg);   color:var(--red); }
+.verdict-source { font-family:var(--mono); font-size:11px; color:var(--gray3); }
+
+.stock-grids { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+.stock-section {
+  background:var(--white); border:1px solid var(--border);
+  border-radius:6px; overflow:hidden;
+}
+.stock-section-hdr {
+  padding:12px 16px; background:#f8f7f5;
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono); font-size:10px; letter-spacing:2px;
+  color:var(--gray3); text-transform:uppercase;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.stock-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 16px; border-bottom:1px solid var(--border);
+  transition:background .1s;
+}
+.stock-row:last-child { border-bottom:none; }
+.stock-row:hover { background:#fafaf8; }
+.stock-row.priority-source { background:#f0fff4; }
+.stock-row .sr-name { font-size:13px; color:var(--black); }
+.stock-row .sr-priority { font-family:var(--mono); font-size:9px; color:var(--gray4); margin-top:2px; }
+.stock-row .sr-qty {
+  font-family:var(--mono); font-size:16px; font-weight:500;
+  color:var(--black);
+}
+.stock-row .sr-qty.has-stock { color:var(--green); }
+.stock-row .sr-qty.no-stock  { color:var(--gray4); }
+.stock-row .sr-qty.insufficient { color:var(--yellow); }
+.priority-tag {
+  display:inline-block; font-family:var(--mono); font-size:8px;
+  padding:1px 5px; border-radius:2px; margin-left:6px;
+  background:var(--black); color:white; letter-spacing:1px;
+}
+
+/* ── ORDER DETAIL MODAL ── */
+.modal-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:1000; align-items:center; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  background:var(--white); border-radius:8px;
+  width:680px; max-width:95vw; max-height:90vh;
+  overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.2);
+}
+.modal-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:20px 24px; border-bottom:1px solid var(--border);
+  position:sticky; top:0; background:var(--white); z-index:1;
+}
+.modal-hdr h3 { font-size:15px; font-weight:700; }
+.modal-close { background:none; border:none; font-size:20px; cursor:pointer; color:var(--gray3); line-height:1; }
+.modal-close:hover { color:var(--black); }
+.modal-body { padding:24px; }
+.modal-section { margin-bottom:24px; }
+.modal-section-title {
+  font-family:var(--mono); font-size:9px; letter-spacing:2px;
+  color:var(--gray3); text-transform:uppercase; margin-bottom:12px;
+  padding-bottom:8px; border-bottom:1px solid var(--border);
+}
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.info-item label { font-family:var(--mono); font-size:9px; letter-spacing:1px; color:var(--gray3); display:block; margin-bottom:3px; }
+.info-item value { font-size:13px; color:var(--black); display:block; }
+
+/* ── LOADING ── */
+.loading-state {
+  display:flex; align-items:center; justify-content:center;
+  padding:60px; color:var(--gray3);
+  font-family:var(--mono); font-size:11px; letter-spacing:2px;
+  flex-direction:column; gap:12px;
+}
+.spinner {
+  width:28px; height:28px; border:2px solid var(--gray5);
+  border-top-color:var(--black); border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align:center; padding:60px 20px; color:var(--gray3);
+}
+.empty-icon { font-size:36px; margin-bottom:12px; }
+.empty-text { font-size:13px; }
+
+/* ── CSV COPY ── */
+.csv-box {
+  background:#f8f7f5; border:1px solid var(--border);
+  border-radius:4px; padding:14px 16px;
+  font-family:var(--mono); font-size:10px; color:var(--gray2);
+  white-space:pre; overflow-x:auto; max-height:100px;
+  line-height:1.8; margin-top:12px;
+}
+.btn-sm {
+  padding:6px 14px; border-radius:3px; font-family:var(--mono);
+  font-size:10px; letter-spacing:1px; cursor:pointer; transition:all .15s;
+}
+.btn-sm.primary { background:var(--black); color:white; border:none; }
+.btn-sm.primary:hover { background:#333; }
+.btn-sm.secondary { background:none; color:var(--gray2); border:1px solid var(--border); }
+.btn-sm.secondary:hover { border-color:var(--black); color:var(--black); }
+
+/* ── UPLOAD ── */
+.upload-zone {
+  border:2px dashed var(--border); border-radius:6px;
+  padding:24px 16px; text-align:center; cursor:pointer;
+  background:#fafaf8; transition:all .2s; margin-bottom:12px;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color:var(--black); background:#f4f3f0;
+}
+.uz-icon { font-size:28px; margin-bottom:8px; }
+.uz-title { font-size:13px; font-weight:500; color:var(--black); margin-bottom:4px; }
+.uz-sub { font-family:var(--mono); font-size:10px; color:var(--gray3); }
+.upload-divider {
+  text-align:center; margin:10px 0; position:relative;
+  color:var(--gray4); font-family:var(--mono); font-size:10px;
+}
+.upload-divider::before, .upload-divider::after {
+  content:''; position:absolute; top:50%; width:42%; height:1px; background:var(--border);
+}
+.upload-divider::before { left:0; }
+.upload-divider::after  { right:0; }
+.paste-area {
+  width:100%; border:1px solid var(--border); border-radius:4px;
+  padding:10px 12px; font-family:var(--mono); font-size:11px;
+  color:var(--black); resize:vertical; outline:none;
+  transition:border-color .15s; background:white; min-height:80px;
+}
+.paste-area:focus { border-color:var(--black); }
+.upload-status {
+  margin:10px 0; font-family:var(--mono); font-size:11px;
+  padding:0; border-radius:4px;
+}
+.upload-status.ok   { color:var(--green); }
+.upload-status.err  { color:var(--red); }
+.upload-status.info { color:var(--gray2); }
+.btn-upload {
+  width:100%; padding:11px; background:var(--black); color:white;
+  border:none; border-radius:4px; font-family:var(--mono);
+  font-size:11px; letter-spacing:2px; cursor:pointer; transition:all .15s;
+  margin-top:8px;
+}
+.btn-upload:hover { background:#333; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:var(--gray4); border-radius:2px; }
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  display:flex; gap:10px; margin-bottom:16px; align-items:center; flex-wrap:wrap;
+}
+.filter-input {
+  padding:8px 12px; border:1px solid var(--border); border-radius:4px;
+  font-family:var(--sans); font-size:12px; color:var(--black);
+  outline:none; width:220px; transition:border-color .15s;
+}
+.filter-input:focus { border-color:var(--black); }
+.filter-select {
+  padding:8px 12px; border:1px solid var(--border); border-radius:4px;
+  font-family:var(--mono); font-size:11px; color:var(--gray2);
+  outline:none; background:white; cursor:pointer;
+}
+.filter-count { font-family:var(--mono); font-size:10px; color:var(--gray3); margin-left:auto; }
+
+/* ── ACTION BTN ── */
+.action-btn {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:5px 10px; border-radius:3px; font-family:var(--mono);
+  font-size:9px; letter-spacing:1px; cursor:pointer;
+  border:1px solid var(--border); background:white; color:var(--gray2);
+  transition:all .15s;
+}
+.action-btn:hover { border-color:var(--black); color:var(--black); }
+.action-btn.check-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-bg); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4bWxuczppbmtzY2FwZT0iaHR0cDovL3d3dy5pbmtzY2FwZS5vcmcvbmFtZXNwYWNlcy9pbmtzY2FwZSIgdmVyc2lvbj0iMS4xIiB3aWR0aD0iMjAwMCIgaGVpZ2h0PSIyMDAwIiB2aWV3Qm94PSIwIDAgMjAwMCAyMDAwIj4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcF8xIj4KPHBhdGggdHJhbnNmb3JtPSJtYXRyaXgoNCwwLDAsLTQsMCwyMDAwKSIgZD0iTTAgNTAwSDUwMFYwSDBaIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPGcgZmlsbD0iI2ZmZmZmZiIgaW5rc2NhcGU6Z3JvdXBtb2RlPSJsYXllciIgaW5rc2NhcGU6bGFiZWw9IkNhbHF1ZSAxIj4KPGcgY2xpcC1wYXRoPSJ1cmwoI2NsaXBfMSkiPgo8cGF0aCB0cmFuc2Zvcm09Im1hdHJpeCg0LDAsMCwtNCw4NS4yMDM2LDExMTAuNTQ0OCkiIGQ9Ik0wIDBDLTEwLjIxOCAwLTEzLjkzNCAzLjQ4NC0xMi40NjUgMTEuM0wtMTAuOTkzIDE5LjA0M0g1LjI2NUw0LjE3OSAxNC4wMUMzLjc5MiAxMi4zODYgNC40MTEgMTEuNDU2IDYuNjU4IDExLjA2OSA4LjUxNyAxMC43NjEgMTAuOTE2IDEwLjY4MiAxNS4zMjcgMTAuNjgyIDE4LjE5MyAxMC42ODIgMjEuNDQyIDEwLjc2MSAyMy42MSAxMC45MTYgMjYuNDc1IDExLjE0OCAyNy4wOTQgMTEuNjExIDI3LjQwNSAxMy4yMzYgMjcuNzkyIDE1LjA5NiAyNy4zMjkgMTUuNzkxIDIxLjU5OCAxOC41OEwyLjAxMiAyOC4xOEMtNS41NzIgMzEuODk2LTcuMTIxIDM0Ljk5My02LjAzOSA0MC4xMDJMLTUuMDMzIDQ0LjgyNEMtMy4yNTMgNTMuMzM4LS4zMTEgNTUuMzUgMTAuOTE2IDU1LjM1SDQxLjI2QzUwLjU1MiA1NS4zNSA1My4xMDYgNTEuODY5IDUxLjYzNCA0NC44MjRMNDkuODU3IDM2LjIzSDMyLjk3OEwzMy45MDcgNDAuNDg2QzM0LjYwNiA0My41ODYgMzMuOTg3IDQ0LjM1NyAyOS4yNjUgNDQuNjY4IDI3Ljk0OCA0NC43NDUgMjUuMzE0IDQ0LjgyNCAyMy4zNzggNDQuODI0IDIwLjA1MyA0NC44MjQgMTYuNzIgNDQuNzQ1IDE0Ljk0IDQ0LjU4OSAxMS45OTggNDQuMjgxIDExLjM4IDQzLjU4NiAxMS4xNDggNDIuNDIyIDEwLjc2MSA0MC40ODYgMTEuMDcyIDM5LjYzNSAxNS4zMjcgMzcuNTQ0TDQxLjY1MSAyNC41NEM0Ni45MTIgMjEuOTg1IDQ3LjYxIDIwLjM2IDQ2Ljc2IDE2LjQxM0w0NS42NzQgMTEuNDU2QzQzLjgxOCAzLjA5NCA0MS4zNCAwIDMwLjUwMyAwWiIvPgo8cGF0aCB0cmFuc2Zvcm09Im1hdHJpeCg0LDAsMCwtNCwzODMuNzIwNCw4OTAuOTk5NjYpIiBkPSJNMCAwLTI4LjE4LTU0LjM0NEgtOS4zNjhMLTQuODAxLTQ0LjM2MUgxNi4xMDJMMTcuODgyLTU0LjM0NEgzNi42OTRMMjUuNzc3IDBaTTExLjQ1Ni0xMS4yMjRIMTEuNjExTDE1LjA5Ni0zMy45MDdILS4xNTZaIi8+CjxwYXRoIHRyYW5zZm9ybT0ibWF0cml4KDQsMCwwLC00LDU4Mi4wOTg0LDg5MC45OTk2NikiIGQ9Ik0wIDAtOS44MzQtNTQuMzQ0SDM4LjE2Nkw0MC40MS00MS40MTZIIOS44MzFMMTcuMTg0IDBaIi8+CjxwYXRoIHRyYW5zZm9ybT0ibWF0cml4KDQsMCwwLC00LDc1Mi43MzI0LDEwMzMuNzUyKSIgZD0iTTAgMCAyLjk0MiAxNi44QzUuODgzIDMzLjgzMSAxOC42NTYgMzYuNjk0IDM3LjYyMyAzNi42OTQgNTYuODIyIDM2LjY5NCA2OC4wNDcgMzMuNTIgNjUuMDI1IDE2LjhMNjIuMDA4IDAgQzU4Ljk5LTE2LjggNDYuMjE0LTE5LjgxOCAyNy40MDUtMTkuODE4IDguMzU5LTE5LjgxOC0yLjg2Ni0xNi41NjUgMCAwTTQzLjg5NCAxLjA4NSA0Ni41MjUgMTUuNDA3QzQ4LjE0OSAyMy45MjEgNDUuMDU2IDI0Ljc3MSAzNS4zNzcgMjQuNzcxIDI2LjMyIDI0Ljc3MSAyMi4yOTYgMjMuOTk3IDIwLjY2OCAxNS40MDdMMTcuOTU4IDEuMDg1QzE2LjMzMy03LjY2NCAxOS42NjItOC4zNjIgMjkuMTg2LTguMzYyIDM4LjYyOS04LjM2MiA0Mi4yNjYtNy41ODggNDMuODk0IDEuMDg1Ii8+CjxwYXRoIHRyYW5zZm9ybT0ibWF0cml4KDQsMCwwLC00LDEyNjQuNjIyNCw4OTAuOTk5NjYpIiBkPSJNMCAwLTE3LjQxOS00MC44NzNILTE3LjU3MUwtMjIuNDQ4IDBILTRFNS41MTlMLTY1LjY0OC01NC4zNDRILTQ3LjkxOEwtMzQuNjc4LTE1LjE3MkgtMzQuNTI2TC0zMC4zNDQtNTQuMzQ0SC04LjkwMUw3LjQzMi0xNi4xMDJINy41ODhMMTAuMzc3LTU0LjM0NEgyOC40ODdMMjMuNzY5IDBaIi8+CjxwYXRoIHRyYW5zZm9ybT0ibWF0cml4KDQsMCwwLC00LDEzOTkuOTQxMiwxMDMzLjc1MikiIGQ9Ik0wIDAgMi45NDIgMTYuOEM1Ljg4MyAzMy44MzEgMTguNjU2IDM2LjY5NCAzNy42MjMgMzYuNjk0IDU2LjgyMiAzNi42OTQgNjguMDQ3IDMzLjUyIDY1LjAyOSAxNi44TDYyLjAxMSAwIEM1OC45OS0xNi44IDQ2LjIxNy0xOS44MTggMjcuNDA1LTE5LjgxOCA4LjM2Mi0xOS44MTgtMi44NjYtMTYuNTY1IDAgME00My44OTQgMS4wODUgNDYuNTI4IDE1LjQwN0M0OC4xNTMgMjMuOTIxIDQ1LjA1NiAyNC43NzEgMzUuMzc3IDI0Ljc3MSAyNi4zMiAyNC43NzEgMjIuMjk2IDIzLjk5NyAyMC42NzEgMTUuNDA3TDE3Ljk2MSAxLjA4NUM xNi4zMzctNy42NjQgMTkuNjYyLTguMzYyIDI5LjE4Ni04LjM2MiAzOC42MjktOC4zNjIgNDIuMjY5LTcuNTg4IDQzLjg5NCAxLjA4NSIvPgo8cGF0aCB0cmFuc2Zvcm09Im1hdHJpeCg0LDAsMCwtNCwxOTAwLjU0NDgsODkwLjk5OTY2KSIgZD0iTTAgMC03Ljc0My0zOS45NDZILTcuODk5TC0yMi42ODMgMEgtNDcuMjIzTC01Ny4wNTQtNTQuMzQ0SC0zOS43OTFMLTMyLjkwMi0xNS40MDdILTMyLjc0NkwtMTguODEyLTU0LjM0NEg2LjU3OEwxNi4zMzcgMFoiLz4KPC9nPgo8L2c+Cjwvc3ZnPgo=" alt="SALOMON" style="filter:brightness(0) invert(1);">
+      <div class="sys-label">출고 관리 시스템</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">메뉴</div>
+      <div class="nav-item active" onclick="showPanel('orders')" id="nav-orders">
+        <span class="nav-icon">📋</span> 신청 목록
+        <span class="nav-badge" id="badge-orders">0</span>
+      </div>
+      <div class="nav-item" onclick="showPanel('check')" id="nav-check">
+        <span class="nav-icon">🔍</span> 재고 확인
+      </div>
+      <div class="nav-item" onclick="showPanel('stock-upload')" id="nav-stock-upload">
+        <span class="nav-icon">📦</span> 재고 업로드
+      </div>
+      <div class="nav-item" onclick="showPanel('order-upload')" id="nav-order-upload">
+        <span class="nav-icon">📤</span> 출고 업로드
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">재고 기준</div>
+      <div style="padding:4px 20px;">
+        <div style="font-family:var(--mono);font-size:9px;color:#444;line-height:2;">
+          1순위 · 마케팅창고<br>
+          2순위 · CJ물류<br>
+          3순위 · 리테일창고<br>
+          4순위 · 온라인창고<br>
+          5순위 · 매장재고<br>
+          6순위 · 홀세일창고
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div id="stock-date">재고 기준일: —</div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="panel-title">신청 목록</div>
+      <div class="topbar-right">
+        <div class="topbar-date" id="today-date"></div>
+        <button class="btn-refresh" onclick="loadAll()">⟳ 새로고침</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ══ PANEL: 신청 목록 ══ -->
+      <div class="panel active" id="panel-orders">
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">전체 신청</div>
+            <div class="stat-num" id="stat-total">—</div>
+            <div class="stat-sub">건</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">출고 가능</div>
+            <div class="stat-num" id="stat-ok">—</div>
+            <div class="stat-sub">건</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-label">재고 부족</div>
+            <div class="stat-num" id="stat-ng">—</div>
+            <div class="stat-sub">건</div>
+          </div>
+          <div class="stat-card yellow">
+            <div class="stat-label">확인 필요</div>
+            <div class="stat-num" id="stat-pending">—</div>
+            <div class="stat-sub">건</div>
+          </div>
+        </div>
+
+        <div class="section-hdr">
+          <h2>출고 신청 목록</h2>
+          <span class="hint">클릭하면 상세 확인 및 재고 조회 가능</span>
+        </div>
+
+        <div class="filter-bar">
+          <input class="filter-input" type="text" id="order-search" placeholder="접수번호, 신청자, 상품명 검색..." oninput="filterOrders()">
+          <select class="filter-select" id="filter-type" onchange="filterOrders()">
+            <option value="">전체 구분</option>
+            <option value="스키협회">스키협회</option>
+            <option value="팀 살로몬">팀 살로몬</option>
+            <option value="셀럽/인플루언서">셀럽/인플루언서</option>
+            <option value="기타">기타</option>
+          </select>
+          <span class="filter-count" id="filter-count"></span>
+        </div>
+
+        <div class="table-wrap">
+          <div id="orders-loading" class="loading-state">
+            <div class="spinner"></div>
+            <span>데이터 불러오는 중...</span>
+          </div>
+          <div id="orders-table" style="display:none;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>접수번호</th>
+                  <th>접수일시</th>
+                  <th>구분</th>
+                  <th>신청자</th>
+                  <th>상품명</th>
+                  <th>코드</th>
+                  <th>색상</th>
+                  <th>사이즈</th>
+                  <th>수량</th>
+                  <th>재고상태</th>
+                  <th>출고창고</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody"></tbody>
+            </table>
+          </div>
+          <div id="orders-empty" class="empty-state" style="display:none;">
+            <div class="empty-icon">📭</div>
+            <div class="empty-text">신청 내역이 없습니다</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PANEL: 재고 확인 ══ -->
+      <div class="panel" id="panel-check">
+
+        <div class="section-hdr" style="margin-bottom:20px;">
+          <h2>재고 직접 조회</h2>
+          <span class="hint">상품코드 + 색상코드 + 사이즈로 창고별 재고 확인</span>
+        </div>
+
+        <div class="check-form">
+          <div class="check-form-grid">
+            <div class="form-field">
+              <label>상품코드</label>
+              <input type="text" id="chk-code" placeholder="S260109QSQ03">
+            </div>
+            <div class="form-field">
+              <label>색상코드</label>
+              <input type="text" id="chk-color" placeholder="WRE">
+            </div>
+            <div class="form-field">
+              <label>사이즈</label>
+              <input type="text" id="chk-size" placeholder="265">
+            </div>
+            <div class="form-field">
+              <label>요청 수량</label>
+              <input type="number" id="chk-qty" value="1" min="1">
+            </div>
+            <div class="form-field">
+              <label>&nbsp;</label>
+              <button class="btn-check" onclick="runCheck()">재고 조회</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stock-result" id="stock-result">
+          <div class="result-hero">
+            <div class="result-product">
+              <div class="rp-name" id="res-name">—</div>
+              <div class="rp-meta" id="res-meta">—</div>
+            </div>
+            <div class="result-verdict">
+              <div class="verdict-badge" id="res-verdict-badge">—</div>
+              <div class="verdict-source" id="res-verdict-source">—</div>
+            </div>
+          </div>
+
+          <div class="stock-grids">
+            <div class="stock-section">
+              <div class="stock-section-hdr">
+                <span>창고별 재고</span>
+                <span id="res-wh-total"></span>
+              </div>
+              <div id="res-warehouse"></div>
+            </div>
+            <div class="stock-section">
+              <div class="stock-section-hdr">
+                <span>매장별 재고 (5순위)</span>
+                <span id="res-store-total"></span>
+              </div>
+              <div id="res-stores" style="max-height:320px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PANEL: 재고 업로드 ══ -->
+      <div class="panel" id="panel-stock-upload">
+        <div class="section-hdr" style="margin-bottom:20px;">
+          <h2>재고 현황 업로드</h2>
+          <span class="hint">물류재고현황 + 매장재고현황 파일을 업로드하거나 붙여넣기</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+          <!-- 물류 재고 -->
+          <div class="check-form">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--gray3);text-transform:uppercase;margin-bottom:14px;">
+              📦 물류재고현황 <span style="color:var(--red);font-size:8px;">창고별 재고</span>
+            </div>
+
+            <!-- 파일 업로드 -->
+            <div class="upload-zone" id="wh-upload-zone" onclick="document.getElementById('wh-file-input').click()">
+              <input type="file" id="wh-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleWhFile(event)">
+              <div class="uz-icon">📂</div>
+              <div class="uz-title">파일 드래그 또는 클릭</div>
+              <div class="uz-sub">물류재고현황.xls / .xlsx / .csv</div>
+            </div>
+
+            <div class="upload-divider"><span>또는</span></div>
+
+            <!-- 붙여넣기 -->
+            <div class="form-field">
+              <label>엑셀에서 전체 복사(Ctrl+A → Ctrl+C) 후 붙여넣기</label>
+              <textarea id="wh-paste-area" class="paste-area" placeholder="여기를 클릭하고 Ctrl+V로 붙여넣기..." rows="5" onpaste="handleWhPaste(event)"></textarea>
+            </div>
+
+            <div id="wh-status" class="upload-status"></div>
+            <button class="btn-upload" id="wh-upload-btn" onclick="uploadWhStock()" style="display:none">
+              구글 시트 [재고현황] 탭에 저장 (기존 데이터 덮어쓰기)
+            </button>
+          </div>
+
+          <!-- 매장 재고 -->
+          <div class="check-form">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--gray3);text-transform:uppercase;margin-bottom:14px;">
+              🏪 매장재고현황 <span style="color:#6a1b9a;font-size:8px;">전국 매장별 재고</span>
+            </div>
+
+            <!-- 파일 업로드 -->
+            <div class="upload-zone" id="st-upload-zone" onclick="document.getElementById('st-file-input').click()">
+              <input type="file" id="st-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleStFile(event)">
+              <div class="uz-icon">📂</div>
+              <div class="uz-title">파일 드래그 또는 클릭</div>
+              <div class="uz-sub">매장재고현황.xlsx / .xls / .csv</div>
+            </div>
+
+            <div class="upload-divider"><span>또는</span></div>
+
+            <!-- 붙여넣기 -->
+            <div class="form-field">
+              <label>엑셀에서 전체 복사(Ctrl+A → Ctrl+C) 후 붙여넣기</label>
+              <textarea id="st-paste-area" class="paste-area" placeholder="여기를 클릭하고 Ctrl+V로 붙여넣기..." rows="5" onpaste="handleStPaste(event)"></textarea>
+            </div>
+
+            <div id="st-status" class="upload-status"></div>
+            <button class="btn-upload" id="st-upload-btn" onclick="uploadStStock()" style="display:none">
+              구글 시트 [매장재고] 탭에 저장 (기존 데이터 덮어쓰기)
+            </button>
+          </div>
+        </div>
+
+        <!-- 업로드 미리보기 -->
+        <div id="stock-preview" style="display:none;margin-top:20px;">
+          <div class="section-hdr"><h2>데이터 미리보기</h2></div>
+          <div class="table-wrap" style="max-height:300px;overflow-y:auto;">
+            <table class="data-table" id="stock-preview-table"></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ PANEL: 출고 업로드 ══ -->
+      <div class="panel" id="panel-order-upload">
+        <div class="section-hdr" style="margin-bottom:20px;">
+          <h2>출고 신청 업로드</h2>
+          <span class="hint">애슬릿 커뮤니티 오더 취합 형식의 파일 업로드 또는 붙여넣기</span>
+        </div>
+
+        <div class="check-form">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--gray3);text-transform:uppercase;margin-bottom:14px;">
+            📋 출고 신청 데이터
+            <span style="color:var(--gray3);font-size:9px;margin-left:8px;text-transform:none;">
+              컬럼: 접수번호 / 접수일시 / 신청구분 / 소속 / 신청자 / 상품명 / 상품코드 / 색상코드 / 사이즈 / 수량 / 정상가 / 소계 / 수령인 / 연락처 / 주소 / 우편번호 / 배송방법 / IO코드
+            </span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">
+            <!-- 파일 업로드 -->
+            <div>
+              <div class="upload-zone" id="ord-upload-zone" onclick="document.getElementById('ord-file-input').click()">
+                <input type="file" id="ord-file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleOrdFile(event)">
+                <div class="uz-icon">📂</div>
+                <div class="uz-title">파일 드래그 또는 클릭</div>
+                <div class="uz-sub">애슬릿커뮤니티_오더_취합_리스트.xlsx</div>
+              </div>
+            </div>
+
+            <!-- 붙여넣기 -->
+            <div class="form-field">
+              <label>엑셀에서 전체 복사 후 붙여넣기</label>
+              <textarea id="ord-paste-area" class="paste-area" placeholder="엑셀 데이터를 그대로 붙여넣기..." rows="8" onpaste="handleOrdPaste(event)" style="height:120px;"></textarea>
+            </div>
+          </div>
+
+          <div id="ord-status" class="upload-status"></div>
+        </div>
+
+        <!-- 업로드 미리보기 + 재고 확인 결과 -->
+        <div id="order-preview" style="display:none;margin-top:20px;">
+          <div class="section-hdr">
+            <h2>업로드 데이터 확인</h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn-sm primary" onclick="checkUploadedOrders()">⚡ 재고 일괄 확인</button>
+              <button class="btn-sm primary" onclick="saveUploadedOrders()">💾 구글 시트에 저장</button>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--gray3);">→ [출고신청] 탭에 추가</span>
+              <button class="btn-sm secondary" onclick="clearOrderUpload()">✕ 초기화</button>
+            </div>
+          </div>
+
+          <div class="stats-row" style="margin-bottom:16px;">
+            <div class="stat-card"><div class="stat-label">총 신청</div><div class="stat-num" id="up-total">—</div></div>
+            <div class="stat-card green"><div class="stat-label">출고 가능</div><div class="stat-num" id="up-ok">—</div></div>
+            <div class="stat-card red"><div class="stat-label">재고 부족</div><div class="stat-num" id="up-ng">—</div></div>
+            <div class="stat-card yellow"><div class="stat-label">확인 필요</div><div class="stat-num" id="up-pending">—</div></div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>접수번호</th><th>신청구분</th><th>신청자</th>
+                  <th>상품명</th><th>코드</th><th>색상</th><th>사이즈</th><th>수량</th>
+                  <th>재고상태</th><th>출고창고</th>
+                </tr>
+              </thead>
+              <tbody id="order-upload-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ── ORDER DETAIL MODAL ── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="modal-title">신청 상세</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbym4im8pJLOKEpEzHD7w22PnMborKVocY99suCVwXBE8p6VnTDHNdNng9bm4zpfLBxegA/exec';
+
+let allOrders = [];
+let stockCache = {};
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init() {
+  const now = new Date();
+  document.getElementById('today-date').textContent =
+    now.getFullYear() + '.' + String(now.getMonth()+1).padStart(2,'0') + '.' + String(now.getDate()).padStart(2,'0');
+  loadAll();
+  setTimeout(setupDragDrop, 100);
+}
+
+async function loadAll() {
+  await loadOrders();
+}
+
+// ── LOAD ORDERS ───────────────────────────────────────────────────────────────
+async function loadOrders() {
+  document.getElementById('orders-loading').style.display = 'flex';
+  document.getElementById('orders-table').style.display = 'none';
+  document.getElementById('orders-empty').style.display = 'none';
+
+  try {
+    const res  = await fetch(SCRIPT_URL + '?action=orders', { method: 'GET', mode: 'cors' });
+    const json = await res.json();
+    if (json.status !== 'ok') throw new Error(json.message);
+
+    allOrders = json.orders || [];
+    document.getElementById('badge-orders').textContent = allOrders.length;
+
+    // 각 신청건의 재고 확인 (백그라운드)
+    renderOrders(allOrders);
+    checkAllOrders();
+
+  } catch(e) {
+    document.getElementById('orders-loading').innerHTML =
+      `<div style="color:var(--red);font-family:var(--mono);font-size:11px;">⚠ 데이터 로드 실패: ${e.message}</div>`;
+  }
+}
+
+async function checkAllOrders() {
+  for (const order of allOrders) {
+    const key = `${order['상품코드']}_${order['색상코드']}_${order['사이즈']}`;
+    if (stockCache[key]) continue;
+
+    try {
+      const res  = await fetch(`${SCRIPT_URL}?action=check&code=${encodeURIComponent(order['상품코드'])}&colorCode=${encodeURIComponent(order['색상코드'])}&size=${encodeURIComponent(order['사이즈'])}&qty=${order['수량']}`);
+      const json = await res.json();
+      if (json.status === 'ok') {
+        stockCache[key] = json;
+        updateOrderRow(order['접수번호'] + '_' + order['상품코드'] + '_' + order['사이즈'], json);
+      }
+    } catch(e) {}
+  }
+  updateStats();
+}
+
+function renderOrders(orders) {
+  const tbody = document.getElementById('orders-tbody');
+
+  if (!orders.length) {
+    document.getElementById('orders-loading').style.display = 'none';
+    document.getElementById('orders-empty').style.display = 'block';
+    return;
+  }
+
+  tbody.innerHTML = orders.map(o => {
+    const rowId = o['접수번호'] + '_' + o['상품코드'] + '_' + o['사이즈'];
+    const date  = o['접수일시'] ? String(o['접수일시']).slice(0,16) : '—';
+    return `
+    <tr>
+      <td class="td-mono">${o['접수번호'] || '—'}</td>
+      <td class="td-mono" style="font-size:11px;">${date}</td>
+      <td>${o['신청구분'] || '—'}</td>
+      <td>${o['신청자'] || '—'}</td>
+      <td class="td-name">${o['상품명'] || '—'}</td>
+      <td class="td-code">${o['상품코드'] || '—'}</td>
+      <td class="td-mono">${o['색상코드'] || '—'}</td>
+      <td class="td-mono">${o['사이즈'] || '—'}</td>
+      <td class="td-mono" style="text-align:right;">${o['수량'] || 0}</td>
+      <td id="status-${rowId}"><span class="badge checking">확인중</span></td>
+      <td id="source-${rowId}">—</td>
+      <td>
+        <button class="action-btn check-btn" onclick="openDetail('${rowId}', ${JSON.stringify(o).replace(/'/g,"&#39;")})">상세</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('orders-loading').style.display = 'none';
+  document.getElementById('orders-table').style.display = 'block';
+  document.getElementById('filter-count').textContent = `${orders.length}건`;
+}
+
+function updateOrderRow(rowId, stockData) {
+  const statusEl = document.getElementById('status-' + rowId);
+  const sourceEl = document.getElementById('source-' + rowId);
+  if (!statusEl) return;
+
+  const r = stockData.result;
+  if (r.possible) {
+    statusEl.innerHTML = `<span class="badge possible">✓ 가능</span>`;
+    const cls = r.type === 'store' ? 'store' : (r.key || getWhClass(r.source));
+    sourceEl.innerHTML = `<span class="badge ${cls}">${r.source}</span>`;
+  } else {
+    statusEl.innerHTML = `<span class="badge impossible">✗ 불가</span>`;
+    sourceEl.innerHTML = `<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>`;
+  }
+}
+
+function getWhClass(source) {
+  if (!source) return '';
+  if (source.includes('마케팅')) return 'mkt';
+  if (source.includes('CJ')) return 'cj';
+  if (source.includes('리테일')) return 'retail';
+  if (source.includes('온라인')) return 'online';
+  if (source.includes('홀세일')) return 'wholesale';
+  return 'store';
+}
+
+function updateStats() {
+  const total = allOrders.length;
+  let ok = 0, ng = 0, pending = 0;
+
+  allOrders.forEach(o => {
+    const key = `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`;
+    const s = stockCache[key];
+    if (!s) { pending++; }
+    else if (s.result.possible) { ok++; }
+    else { ng++; }
+  });
+
+  document.getElementById('stat-total').textContent   = total;
+  document.getElementById('stat-ok').textContent      = ok;
+  document.getElementById('stat-ng').textContent      = ng;
+  document.getElementById('stat-pending').textContent = pending;
+}
+
+// ── FILTER ────────────────────────────────────────────────────────────────────
+function filterOrders() {
+  const q    = document.getElementById('order-search').value.toLowerCase();
+  const type = document.getElementById('filter-type').value;
+
+  const filtered = allOrders.filter(o => {
+    const matchQ = !q || [o['접수번호'],o['신청자'],o['상품명'],o['상품코드']].some(v => String(v).toLowerCase().includes(q));
+    const matchT = !type || o['신청구분'] === type;
+    return matchQ && matchT;
+  });
+
+  renderOrders(filtered);
+  filtered.forEach(o => {
+    const rowId = o['접수번호'] + '_' + o['상품코드'] + '_' + o['사이즈'];
+    const key   = `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`;
+    if (stockCache[key]) updateOrderRow(rowId, stockCache[key]);
+  });
+}
+
+// ── ORDER DETAIL MODAL ────────────────────────────────────────────────────────
+function openDetail(rowId, order) {
+  const key = `${order['상품코드']}_${order['색상코드']}_${order['사이즈']}`;
+  const stock = stockCache[key];
+
+  document.getElementById('modal-title').textContent = `${order['접수번호']} — ${order['상품명']}`;
+
+  let stockHtml = stock ? buildStockHtml(stock, order['수량']) :
+    `<div style="font-family:var(--mono);font-size:11px;color:var(--gray3);">재고 조회 중...</div>`;
+
+  // CSV 데이터 생성
+  const csvRow = [
+    '', '', '', '—', order['접수일시'], order['신청구분'], order['신청자'],
+    '', order['상품코드'], order['상품명'], order['색상코드'], order['사이즈'],
+    order['정상가'], order['수량'], order['신청구분'] + ' 출고 신청', order['IO코드'] || '', '', '',
+    order['주소'], order['우편번호'], order['수령인'], order['연락처'], order['배송방법']
+  ].join('\t');
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">신청자 정보</div>
+      <div class="info-grid">
+        <div class="info-item"><label>신청 구분</label><value>${order['신청구분']||'—'}</value></div>
+        <div class="info-item"><label>소속</label><value>${order['소속']||'—'}</value></div>
+        <div class="info-item"><label>신청자</label><value>${order['신청자']||'—'}</value></div>
+        <div class="info-item"><label>접수일시</label><value style="font-family:var(--mono);font-size:12px;">${order['접수일시']||'—'}</value></div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">제품 정보</div>
+      <div class="info-grid">
+        <div class="info-item"><label>상품명</label><value style="font-weight:700;">${order['상품명']||'—'}</value></div>
+        <div class="info-item"><label>상품코드</label><value style="font-family:var(--mono);">${order['상품코드']||'—'}</value></div>
+        <div class="info-item"><label>색상코드</label><value style="font-family:var(--mono);">${order['색상코드']||'—'}</value></div>
+        <div class="info-item"><label>사이즈</label><value style="font-family:var(--mono);">${order['사이즈']||'—'}</value></div>
+        <div class="info-item"><label>수량</label><value style="font-family:var(--mono);font-size:16px;font-weight:700;">${order['수량']||0}개</value></div>
+        <div class="info-item"><label>정상가</label><value>₩${Number(order['정상가']||0).toLocaleString()}</value></div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">배송 정보</div>
+      <div class="info-grid">
+        <div class="info-item"><label>수령인</label><value>${order['수령인']||'—'}</value></div>
+        <div class="info-item"><label>연락처</label><value style="font-family:var(--mono);">${order['연락처']||'—'}</value></div>
+        <div class="info-item" style="grid-column:1/-1;"><label>주소</label><value>${order['주소']||'—'} (${order['우편번호']||'—'})</value></div>
+        <div class="info-item"><label>배송방법</label><value>${order['배송방법']||'—'}</value></div>
+        <div class="info-item"><label>IO코드</label><value style="font-family:var(--mono);">${order['IO코드']||'—'}</value></div>
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">재고 현황</div>
+      ${stockHtml}
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">입출고 대장 복사</div>
+      <div class="csv-box" id="modal-csv">${csvRow.replace(/\t/g,' │ ')}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn-sm primary" onclick="copyModalCSV('${csvRow.replace(/'/g,"\\'")}')">📋 복사</button>
+        <button class="btn-sm secondary" onclick="openStockCheck('${order['상품코드']}','${order['색상코드']}','${order['사이즈']}',${order['수량']})">재고 직접 조회</button>
+      </div>
+    </div>`;
+
+  document.getElementById('modal').classList.add('open');
+}
+
+function buildStockHtml(stock, qty) {
+  const r = stock.result;
+  const wh = stock.warehouse || {};
+  const stores = stock.stores || [];
+
+  const WAREHOUSES = [
+    { key: 'mkt',       label: '마케팅창고',  priority: 1 },
+    { key: 'cj',        label: 'CJ물류',      priority: 2 },
+    { key: 'retail',    label: '리테일창고',  priority: 3 },
+    { key: 'online',    label: '온라인창고',  priority: 4 },
+    { key: 'wholesale', label: '홀세일창고',  priority: 6 },
+  ];
+
+  const verdictBadge = r.possible
+    ? `<span class="badge possible" style="font-size:12px;padding:5px 12px;">✓ 출고 가능 — ${r.source}</span>`
+    : `<span class="badge impossible" style="font-size:12px;padding:5px 12px;">✗ 전창고 재고 없음</span>`;
+
+  const whRows = WAREHOUSES.map(w => {
+    const q   = wh[w.key] || 0;
+    const isSource = r.possible && r.source === w.label && r.type === 'warehouse';
+    const qCls = q === 0 ? 'no-stock' : q < qty ? 'insufficient' : 'has-stock';
+    return `
+      <div class="stock-row ${isSource ? 'priority-source' : ''}">
+        <div>
+          <div class="sr-name">${w.label}${isSource ? '<span class="priority-tag">출고</span>' : ''}</div>
+          <div class="sr-priority">${w.priority}순위</div>
+        </div>
+        <div class="sr-qty ${qCls}">${q}</div>
+      </div>`;
+  }).join('');
+
+  const storeRows = stores.length
+    ? stores.slice(0, 10).map(s => {
+        const isSource = r.possible && r.type === 'store' && r.storeName === s.storeName;
+        const qCls = s.qty < qty ? 'insufficient' : 'has-stock';
+        return `
+        <div class="stock-row ${isSource ? 'priority-source' : ''}">
+          <div>
+            <div class="sr-name">${s.storeName}${isSource ? '<span class="priority-tag">출고</span>' : ''}</div>
+            <div class="sr-priority">5순위</div>
+          </div>
+          <div class="sr-qty ${qCls}">${s.qty}</div>
+        </div>`;
+      }).join('')
+    : `<div class="empty-state" style="padding:24px;"><div class="empty-text">매장 재고 없음</div></div>`;
+
+  return `
+    <div style="margin-bottom:12px;">${verdictBadge}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="stock-section">
+        <div class="stock-section-hdr"><span>창고별</span></div>
+        ${whRows}
+      </div>
+      <div class="stock-section">
+        <div class="stock-section-hdr"><span>매장별 (5순위)</span></div>
+        <div style="max-height:220px;overflow-y:auto;">${storeRows}</div>
+      </div>
+    </div>`;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+function copyModalCSV(csv) {
+  const text = csv.replace(/ │ /g, '\t');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => alert('✓ 복사되었습니다'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText='position:fixed;opacity:0;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); alert('✓ 복사되었습니다'); } catch(e){}
+    document.body.removeChild(ta);
+  }
+}
+
+function openStockCheck(code, color, size, qty) {
+  closeModal();
+  showPanel('check');
+  document.getElementById('chk-code').value  = code;
+  document.getElementById('chk-color').value = color;
+  document.getElementById('chk-size').value  = size;
+  document.getElementById('chk-qty').value   = qty;
+  runCheck();
+}
+
+// ── STOCK CHECK PANEL ─────────────────────────────────────────────────────────
+async function runCheck() {
+  const code  = document.getElementById('chk-code').value.trim();
+  const color = document.getElementById('chk-color').value.trim();
+  const size  = document.getElementById('chk-size').value.trim();
+  const qty   = parseInt(document.getElementById('chk-qty').value) || 1;
+
+  if (!code || !size) { alert('상품코드와 사이즈를 입력해주세요'); return; }
+
+  const resultEl = document.getElementById('stock-result');
+  resultEl.classList.remove('show');
+
+  try {
+    const res  = await fetch(`${SCRIPT_URL}?action=check&code=${encodeURIComponent(code)}&colorCode=${encodeURIComponent(color)}&size=${encodeURIComponent(size)}&qty=${qty}`);
+    const json = await res.json();
+    if (json.status !== 'ok') throw new Error(json.message);
+
+    renderStockResult(json, qty);
+  } catch(e) {
+    alert('재고 조회 실패: ' + e.message);
+  }
+}
+
+function renderStockResult(data, qty) {
+  const r      = data.result;
+  const wh     = data.warehouse || {};
+  const stores = data.stores    || [];
+
+  document.getElementById('res-name').textContent = `${data.code} · ${data.colorCode} · ${data.size}`;
+  document.getElementById('res-meta').textContent = `요청 수량: ${qty}개`;
+
+  const vb = document.getElementById('res-verdict-badge');
+  const vs = document.getElementById('res-verdict-source');
+  if (r.possible) {
+    vb.className = 'verdict-badge ok';
+    vb.textContent = '✓ 출고 가능';
+    vs.textContent = `출고 창고: ${r.source} (${r.priority}순위)`;
+  } else {
+    vb.className = 'verdict-badge ng';
+    vb.textContent = '✗ 출고 불가';
+    vs.textContent = '모든 창고 재고 부족';
+  }
+
+  const WAREHOUSES = [
+    { key:'mkt',       label:'마케팅창고', priority:1 },
+    { key:'cj',        label:'CJ물류',     priority:2 },
+    { key:'retail',    label:'리테일창고', priority:3 },
+    { key:'online',    label:'온라인창고', priority:4 },
+    { key:'wholesale', label:'홀세일창고', priority:6 },
+  ];
+
+  document.getElementById('res-warehouse').innerHTML = WAREHOUSES.map(w => {
+    const q = wh[w.key] || 0;
+    const isSource = r.possible && r.source === w.label && r.type === 'warehouse';
+    const qCls = q === 0 ? 'no-stock' : q < qty ? 'insufficient' : 'has-stock';
+    return `
+      <div class="stock-row ${isSource ? 'priority-source' : ''}">
+        <div>
+          <div class="sr-name">${w.label}${isSource ? '<span class="priority-tag">출고</span>' : ''}</div>
+          <div class="sr-priority">${w.priority}순위</div>
+        </div>
+        <div class="sr-qty ${qCls}">${q}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('res-wh-total').textContent =
+    `총 ${Object.values(wh).reduce((a,b)=>a+(b||0),0)}`;
+
+  document.getElementById('res-stores').innerHTML = stores.length
+    ? stores.map(s => {
+        const isSource = r.possible && r.type === 'store' && r.storeName === s.storeName;
+        const qCls = s.qty < qty ? 'insufficient' : 'has-stock';
+        return `
+        <div class="stock-row ${isSource ? 'priority-source' : ''}">
+          <div>
+            <div class="sr-name">${s.storeName}${isSource ? '<span class="priority-tag">출고</span>' : ''}</div>
+            <div class="sr-priority">5순위</div>
+          </div>
+          <div class="sr-qty ${qCls}">${s.qty}</div>
+        </div>`;
+      }).join('')
+    : `<div class="empty-state" style="padding:32px;"><div class="empty-text">해당 매장 재고 없음</div></div>`;
+  document.getElementById('res-store-total').textContent =
+    `${stores.reduce((a,s)=>a+s.qty, 0)}개 / ${stores.length}매장`;
+
+  document.getElementById('stock-result').classList.add('show');
+}
+
+// ── STOCK UPLOAD (물류재고) ───────────────────────────────────────────────────
+let whData = null, stData = null, ordData = null;
+
+function setupDragDrop() {
+  ['wh-upload-zone','st-upload-zone','ord-upload-zone'].forEach(id => {
+    const zone = document.getElementById(id);
+    if (!zone) return;
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (id === 'wh-upload-zone') readExcelFile(file, 'wh');
+      else if (id === 'st-upload-zone') readExcelFile(file, 'st');
+      else readExcelFile(file, 'ord');
+    });
+  });
+}
+
+function handleWhFile(e)  { const f = e.target.files[0]; if (f) readExcelFile(f, 'wh'); }
+function handleStFile(e)  { const f = e.target.files[0]; if (f) readExcelFile(f, 'st'); }
+function handleOrdFile(e) { const f = e.target.files[0]; if (f) readExcelFile(f, 'ord'); }
+
+function handleWhPaste(e)  { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'wh'); }
+function handleStPaste(e)  { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'st'); }
+function handleOrdPaste(e) { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'ord'); }
+
+function readExcelFile(file, type) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb   = XLSX.read(data, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+      processRawRows(rows, type);
+    } catch(err) {
+      setStatus(type, '❌ 파일 읽기 실패: ' + err.message, 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parsePasteData(text, type) {
+  const rows = text.trim().split('\n').map(line => line.split('\t').map(v => v.trim()));
+  processRawRows(rows, type);
+}
+
+function processRawRows(rows, type) {
+  if (!rows || rows.length < 2) {
+    setStatus(type, '❌ 데이터가 없습니다', 'err'); return;
+  }
+
+  if (type === 'ord') {
+    processOrderRows(rows); return;
+  }
+
+  // 헤더 자동 탐색
+  let headerIdx = -1, colIdx = {};
+  const searchCols = type === 'wh'
+    ? ['상품코드', '상품명']
+    : ['상품코드', '매장명'];
+
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i].map(v => String(v).trim().replace(/\n/g,''));
+    if (searchCols.every(c => row.some(r => r.includes(c)))) {
+      headerIdx = i;
+      row.forEach((v, idx) => { colIdx[v.replace(/\n/g,'')] = idx; });
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    setStatus(type, `❌ 헤더를 찾을 수 없습니다. (${searchCols.join(', ')} 필요)`, 'err'); return;
+  }
+
+  const dataRows = rows.slice(headerIdx + 1).filter(r => r.some(v => String(v).trim()));
+  if (type === 'wh') whData = { rows, headerIdx, colIdx, dataRows };
+  else               stData = { rows, headerIdx, colIdx, dataRows };
+
+  setStatus(type, `✓ ${dataRows.length.toLocaleString()}행 인식됨 — 구글 시트에 저장을 눌러주세요`, 'ok');
+  document.getElementById(type === 'wh' ? 'wh-upload-btn' : 'st-upload-btn').style.display = 'block';
+
+  // 미리보기
+  showStockPreview(rows[headerIdx], dataRows.slice(0, 5));
+}
+
+function showStockPreview(headers, rows) {
+  const table = document.getElementById('stock-preview-table');
+  const previewCols = headers.slice(0, 10);
+  table.innerHTML = `
+    <thead><tr>${previewCols.map(h => `<th>${h}</th>`).join('')}<th>...</th></tr></thead>
+    <tbody>${rows.map(r => `<tr>${previewCols.map((_, i) => `<td class="td-mono" style="font-size:11px;">${r[i]||''}</td>`).join('')}<td></td></tr>`).join('')}</tbody>`;
+  document.getElementById('stock-preview').style.display = 'block';
+}
+
+async function uploadWhStock() {
+  if (!whData) return;
+  setStatus('wh', '⏳ 업로드 중...', 'info');
+  document.getElementById('wh-upload-btn').disabled = true;
+
+  try {
+    const payload = {
+      action: 'uploadStock',
+      sheetName: '재고현황',
+      rows: whData.rows
+    };
+    await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+    setStatus('wh', '✓ 물류재고현황 업로드 완료!', 'ok');
+    document.getElementById('wh-upload-btn').disabled = false;
+  } catch(e) {
+    setStatus('wh', '❌ 업로드 실패: ' + e.message, 'err');
+    document.getElementById('wh-upload-btn').disabled = false;
+  }
+}
+
+async function uploadStStock() {
+  if (!stData) return;
+  setStatus('st', '⏳ 업로드 중...', 'info');
+  document.getElementById('st-upload-btn').disabled = true;
+
+  try {
+    const payload = {
+      action: 'uploadStock',
+      sheetName: '매장재고',
+      rows: stData.rows
+    };
+    await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+    setStatus('st', '✓ 매장재고현황 업로드 완료!', 'ok');
+    document.getElementById('st-upload-btn').disabled = false;
+  } catch(e) {
+    setStatus('st', '❌ 업로드 실패: ' + e.message, 'err');
+    document.getElementById('st-upload-btn').disabled = false;
+  }
+}
+
+// ── ORDER UPLOAD ──────────────────────────────────────────────────────────────
+const ORDER_COLS = ['접수번호','접수일시','신청구분','소속','신청자','상품명','상품코드','색상코드','사이즈','수량','정상가','소계','수령인','연락처','주소','우편번호','배송방법','IO코드'];
+
+function processOrderRows(rows) {
+  // 헤더 찾기
+  let headerIdx = -1, colIdx = {};
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const row = rows[i].map(v => String(v).trim());
+    if (row.includes('접수번호') && row.includes('상품코드')) {
+      headerIdx = i;
+      row.forEach((v, idx) => { colIdx[v] = idx; });
+      break;
+    }
+  }
+  // 헤더 없으면 첫 행을 헤더로
+  if (headerIdx === -1) {
+    colIdx = {};
+    ORDER_COLS.forEach((c, i) => { colIdx[c] = i; });
+    headerIdx = -1;
+  }
+
+  const dataRows = rows.slice(headerIdx + 1).filter(r => r.some(v => String(v).trim()));
+  ordData = dataRows.map(row => {
+    const obj = {};
+    ORDER_COLS.forEach(col => { obj[col] = row[colIdx[col] ?? ORDER_COLS.indexOf(col)] || ''; });
+    return obj;
+  }).filter(r => r['상품코드']);
+
+  if (!ordData.length) {
+    setStatus('ord', '❌ 유효한 데이터가 없습니다', 'err'); return;
+  }
+
+  setStatus('ord', `✓ ${ordData.length}건 인식됨`, 'ok');
+
+  // 테이블 렌더
+  document.getElementById('up-total').textContent   = ordData.length;
+  document.getElementById('up-ok').textContent      = '—';
+  document.getElementById('up-ng').textContent      = '—';
+  document.getElementById('up-pending').textContent = ordData.length;
+
+  document.getElementById('order-upload-tbody').innerHTML = ordData.map((o, i) => `
+    <tr id="up-row-${i}">
+      <td class="td-mono">${o['접수번호']||'—'}</td>
+      <td>${o['신청구분']||'—'}</td>
+      <td>${o['신청자']||'—'}</td>
+      <td class="td-name">${o['상품명']||'—'}</td>
+      <td class="td-code">${o['상품코드']||'—'}</td>
+      <td class="td-mono">${o['색상코드']||'—'}</td>
+      <td class="td-mono">${o['사이즈']||'—'}</td>
+      <td class="td-mono" style="text-align:right;">${o['수량']||0}</td>
+      <td id="up-status-${i}"><span class="badge checking">확인 전</span></td>
+      <td id="up-source-${i}">—</td>
+    </tr>`).join('');
+
+  document.getElementById('order-preview').style.display = 'block';
+}
+
+async function checkUploadedOrders() {
+  if (!ordData || !ordData.length) return;
+  let ok = 0, ng = 0;
+
+  document.getElementById('up-pending').textContent = ordData.length;
+  document.getElementById('up-ok').textContent      = '0';
+  document.getElementById('up-ng').textContent      = '0';
+
+  for (let i = 0; i < ordData.length; i++) {
+    const o   = ordData[i];
+    const key = `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`;
+    document.getElementById('up-status-'+i).innerHTML = '<span class="badge checking">확인중...</span>';
+
+    try {
+      let data = stockCache[key];
+      if (!data) {
+        const url = `${SCRIPT_URL}?action=check&code=${encodeURIComponent(o['상품코드'])}&colorCode=${encodeURIComponent(o['색상코드'])}&size=${encodeURIComponent(o['사이즈'])}&qty=${o['수량']||1}`;
+        const res = await fetch(url);
+        data = await res.json();
+        if (data.status === 'ok') stockCache[key] = data;
+      }
+
+      if (data?.result?.possible) {
+        ok++;
+        document.getElementById('up-status-'+i).innerHTML = '<span class="badge possible">✓ 가능</span>';
+        const cls = data.result.type === 'store' ? 'store' : getWhClass(data.result.source);
+        document.getElementById('up-source-'+i).innerHTML = `<span class="badge ${cls}">${data.result.source}</span>`;
+      } else {
+        ng++;
+        document.getElementById('up-status-'+i).innerHTML = '<span class="badge impossible">✗ 불가</span>';
+        document.getElementById('up-source-'+i).innerHTML = '<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>';
+      }
+    } catch(e) {
+      ng++;
+      document.getElementById('up-status-'+i).innerHTML = `<span class="badge checking" title="${e.message}">조회실패</span>`;
+    }
+
+    const pending = ordData.length - ok - ng;
+    document.getElementById('up-ok').textContent      = ok;
+    document.getElementById('up-ng').textContent      = ng;
+    document.getElementById('up-pending').textContent = pending;
+  }
+}
+
+async function saveUploadedOrders() {
+  if (!ordData || !ordData.length) return;
+  if (!confirm(`${ordData.length}건을 구글 시트 [출고신청] 탭에 추가 저장합니다.\n계속하시겠습니까?`)) return;
+
+  try {
+    const payload = { action: 'uploadOrders', orders: ordData };
+    await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(payload) });
+    setStatus('ord', `✓ ${ordData.length}건이 구글 시트 [출고신청] 탭에 저장되었습니다`, 'ok');
+    setTimeout(() => { loadOrders(); showPanel('orders'); }, 1500);
+  } catch(e) {
+    setStatus('ord', '❌ 저장 실패: ' + e.message, 'err');
+  }
+}
+
+function clearOrderUpload() {
+  ordData = null;
+  document.getElementById('ord-paste-area').value = '';
+  document.getElementById('ord-file-input').value = '';
+  document.getElementById('order-preview').style.display = 'none';
+  setStatus('ord', '', '');
+}
+
+function setStatus(type, msg, cls) {
+  const el = document.getElementById(type + '-status');
+  if (!el) return;
+  el.textContent  = msg;
+  el.className    = 'upload-status ' + (cls || '');
+}
+
+// ── PANEL NAV (업데이트) ──────────────────────────────────────────────────────
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.getElementById('nav-'   + name).classList.add('active');
+  const titles = {
+    orders: '신청 목록',
+    check:  '재고 확인',
+    'stock-upload': '재고 업로드',
+    'order-upload': '출고 업로드'
+  };
+  document.getElementById('panel-title').textContent = titles[name] || '';
+}
+
+// ── KEYBOARD ──────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Enter' && document.getElementById('panel-check').classList.contains('active')) runCheck();
+});
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+
+init();
+</script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</body>
+</html>
