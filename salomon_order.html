@@ -537,18 +537,26 @@ function chgQty(id, d) {
 
 const prodNames = [];
 
+let ddResults = {};  // 드롭다운 검색 결과 저장 (상품명에 따옴표 등 특수문자가 있어도 안전)
+
 function searchProd(id, q) {
   const drop = document.getElementById('pd'+id);
   if (!q || q.length < 1) { drop.classList.remove('open'); return; }
   const ql = q.toLowerCase();
   const res = prodNames.filter(n => n.toLowerCase().includes(ql)).slice(0, 30);
+  ddResults[id] = res;
   drop.innerHTML = res.length
-    ? res.map(n => {
+    ? res.map((n, i) => {
         const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
-        return `<div class="dd-item" onmousedown="pickProd(${id},'${n.replace(/'/g,"\\'")}')">${n.replace(re,'<mark>$1</mark>')}</div>`;
+        return `<div class="dd-item" onmousedown="pickProdIdx(${id},${i})">${n.replace(re,'<mark>$1</mark>')}</div>`;
       }).join('')
     : '<div class="dd-empty">검색 결과 없음</div>';
   drop.classList.add('open');
+}
+
+function pickProdIdx(id, i) {
+  const name = ddResults[id]?.[i];
+  if (name) pickProd(id, name);
 }
 
 function hideDrop(id, delay) {
@@ -607,7 +615,9 @@ function applyColor(id, c) {
   sizes.forEach(sz => {
     const chip = document.createElement('span');
     chip.className = 'size-chip';
-    chip.textContent = sz;
+    // ERP 사이즈 앞 0 제거해서 표시 (0XS→XS, 00M→M), 실제 값은 원본 유지
+    chip.textContent  = String(sz).replace(/^0+(?=[A-Za-z])/, '');
+    chip.dataset.size = sz;
     chip.onclick = () => { szEl.querySelectorAll('.size-chip').forEach(c => c.classList.remove('selected')); chip.classList.add('selected'); };
     szEl.appendChild(chip);
   });
@@ -624,7 +634,7 @@ function collectItems() {
     const cChip = row.querySelector('.color-chip.selected');
     const colorCode = cChip ? cChip.dataset.cc : '';
     const sChip = row.querySelector('.size-chip.selected');
-    let size = sChip ? sChip.textContent : '';
+    let size = sChip ? (sChip.dataset.size || sChip.textContent) : '';
     if (!size) size = (document.getElementById('szm'+id)?.value||'').trim();
     const qty = parseInt(document.getElementById('pq'+id)?.value)||1;
     const pt  = document.getElementById('pprice'+id)?.textContent||'0';
@@ -718,15 +728,20 @@ async function submitOrder() {
     }))
   };
 
-  // 구글 시트 전송 (백그라운드 — 성공/실패 관계없이 완료 화면으로 이동)
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-
-  // 즉시 완료 화면으로 이동
-  showSuccess(ref);
+  try {
+    // 전송 완료를 기다린 후 완료 화면으로 이동 (no-cors: 응답 내용은 못 읽지만 전송 성공 여부는 확인됨)
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify(payload),
+    });
+    showSuccess(ref);
+  } catch (err) {
+    // 네트워크 오류 → 데이터 유실 방지를 위해 성공 화면으로 넘어가지 않음
+    submitBtn.textContent = '신청서 제출';
+    submitBtn.disabled = false;
+    alert('제출 중 네트워크 오류가 발생했습니다.\n인터넷 연결을 확인한 뒤 다시 제출해주세요.');
+  }
 }
 
 function showSuccess(ref) {
@@ -778,7 +793,7 @@ const clearFields = ids => ids.forEach(id => { const el=document.getElementById(
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 // ── 데이터 로딩 ───────────────────────────────────────────────────────────────
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbym4im8pJLOKEpEzHD7w22PnMborKVocY99suCVwXBE8p6VnTDHNdNng9bm4zpfLBxegA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxXrGJdVjY8hTmQ8YcM-5vSLIlmixmDiw1mFoJWTzdNlcQ-BVBGLNyGWV2v3nBEperJw/exec';
 
 async function loadData() {
   document.getElementById('loading-overlay').style.display = 'flex';

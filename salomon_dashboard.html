@@ -676,7 +676,7 @@ body{background:var(--bg);color:var(--black);font-family:var(--sans);min-height:
 </div>
 
 <script>
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbym4im8pJLOKEpEzHD7w22PnMborKVocY99suCVwXBE8p6VnTDHNdNng9bm4zpfLBxegA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxXrGJdVjY8hTmQ8YcM-5vSLIlmixmDiw1mFoJWTzdNlcQ-BVBGLNyGWV2v3nBEperJw/exec';
 
 let allOrders = [];
 let stockCache = {};
@@ -701,177 +701,27 @@ async function loadOrders() {
   document.getElementById('orders-empty').style.display = 'none';
 
   try {
+    // 서버에서 신청 목록 + 재고 배분 결과 + 재고 상세를 한 번에 수신
     const res  = await fetch(SCRIPT_URL + '?action=orders', { method: 'GET', mode: 'cors' });
     const json = await res.json();
     if (json.status !== 'ok') throw new Error(json.message);
 
     allOrders = json.orders || [];
-    document.getElementById('badge-orders').textContent = allOrders.length;
+    allOrders.forEach((o, i) => { o._idx = i; });   // 상세 모달용 인덱스
+    stockCache = json.stock || {};
 
-    // 각 신청건의 재고 확인 (백그라운드)
-    renderOrders(allOrders);
-    checkAllOrders();
+    document.getElementById('badge-orders').textContent = allOrders.length;
+    if (json.updated) {
+      const el = document.getElementById('stock-date');
+      if (el) el.textContent = '재고 기준일: ' + json.updated;
+    }
+
+    filterOrders();   // 현재 필터 유지한 채 렌더
+    updateStats();
 
   } catch(e) {
     document.getElementById('orders-loading').innerHTML =
       `<div style="color:var(--red);font-family:var(--mono);font-size:11px;">⚠ 데이터 로드 실패: ${e.message}</div>`;
-  }
-}
-
-// ── 누적 재고 매칭 (접수 순서대로 창고 재고 차감) ────────────────────────────
-const WAREHOUSE_PRIORITY = [
-  { key: 'mkt',       label: '마케팅창고', priority: 1 },
-  { key: 'cj',        label: 'CJ물류',     priority: 2 },
-  { key: 'retail',    label: '리테일창고', priority: 3 },
-  { key: 'online',    label: '온라인창고', priority: 4 },
-  // 5순위: 매장 (별도 처리)
-  { key: 'wholesale', label: '홀세일창고', priority: 6 },
-];
-
-async function checkAllOrders() {
-  // 1. 전체 재고 데이터 수집 (고유 SKU별 한 번만 조회)
-  const skuSet = new Set(allOrders.map(o => `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`));
-  const fullStock = {}; // sku -> { warehouse: {}, stores: [] }
-
-  for (const sku of skuSet) {
-    if (fullStock[sku]) continue;
-    const [code, colorCode, size] = sku.split('_');
-    try {
-      const res  = await fetch(`${SCRIPT_URL}?action=check&code=${encodeURIComponent(code)}&colorCode=${encodeURIComponent(colorCode)}&size=${encodeURIComponent(size)}&qty=1`);
-      const json = await res.json();
-      if (json.status === 'ok') {
-        fullStock[sku] = {
-          warehouse: { ...json.warehouse },  // 복사본
-          stores:    json.stores.map(s => ({ ...s })), // 복사본
-        };
-      }
-    } catch(e) {}
-  }
-
-  // 2. 접수 순서대로 누적 차감
-  // 잔여 재고 추적용 (원본 훼손 방지 위해 별도 관리)
-  const remainingWh    = {}; // sku -> { mkt, cj, retail, online, wholesale }
-  const remainingSt    = {}; // sku -> { storeName -> qty }
-
-  // 초기화
-  for (const sku of skuSet) {
-    if (!fullStock[sku]) continue;
-    remainingWh[sku] = { ...fullStock[sku].warehouse };
-    remainingSt[sku] = {};
-    fullStock[sku].stores.forEach(s => {
-      remainingSt[sku][s.storeName] = s.qty;
-    });
-  }
-
-  // 접수일시 순 정렬
-  const sorted = [...allOrders].sort((a, b) => {
-    return String(a['접수일시']).localeCompare(String(b['접수일시']));
-  });
-
-  const orderResults = {}; // rowId -> { possible, source, priority, type, remaining }
-
-  for (const order of sorted) {
-    const sku   = `${order['상품코드']}_${order['색상코드']}_${order['사이즈']}`;
-    const qty   = parseInt(order['수량']) || 1;
-    const rowId = order['접수번호'] + '_' + order['상품코드'] + '_' + order['사이즈'];
-
-    if (!fullStock[sku]) {
-      orderResults[rowId] = { possible: false, source: null, remaining: null };
-      continue;
-    }
-
-    const rwh = remainingWh[sku];
-    const rst = remainingSt[sku];
-    let allocated = false;
-
-    // 창고 우선순위대로 차감 시도 (홀세일 제외하고 먼저)
-    for (const wh of WAREHOUSE_PRIORITY.filter(w => w.key !== 'wholesale')) {
-      if ((rwh[wh.key] || 0) >= qty) {
-        rwh[wh.key] -= qty;
-        orderResults[rowId] = {
-          possible:  true,
-          source:    wh.label,
-          priority:  wh.priority,
-          type:      'warehouse',
-          remaining: rwh[wh.key], // 차감 후 잔여
-        };
-        allocated = true;
-        break;
-      }
-    }
-
-    // 매장 (5순위)
-    if (!allocated) {
-      const storeEntries = Object.entries(rst).filter(([, q]) => q >= qty).sort((a, b) => b[1] - a[1]);
-      if (storeEntries.length > 0) {
-        const [storeName] = storeEntries[0];
-        rst[storeName] -= qty;
-        orderResults[rowId] = {
-          possible:  true,
-          source:    storeName,
-          priority:  5,
-          type:      'store',
-          remaining: rst[storeName],
-        };
-        allocated = true;
-      }
-    }
-
-    // 홀세일 (6순위)
-    if (!allocated && (rwh['wholesale'] || 0) >= qty) {
-      rwh['wholesale'] -= qty;
-      orderResults[rowId] = {
-        possible:  true,
-        source:    '홀세일창고',
-        priority:  6,
-        type:      'warehouse',
-        remaining: rwh['wholesale'],
-      };
-      allocated = true;
-    }
-
-    if (!allocated) {
-      orderResults[rowId] = { possible: false, source: null, remaining: null };
-    }
-  }
-
-  // 3. 화면 업데이트
-  allOrders.forEach(order => {
-    const rowId = order['접수번호'] + '_' + order['상품코드'] + '_' + order['사이즈'];
-    const res   = orderResults[rowId];
-    if (res) updateOrderRowWithResult(rowId, res);
-  });
-
-  // stockCache에도 저장 (상세 모달용)
-  for (const sku of skuSet) {
-    if (fullStock[sku]) stockCache[sku] = fullStock[sku];
-  }
-  orderResultCache = orderResults;
-
-  updateStats();
-}
-
-let orderResultCache = {};
-
-function updateOrderRowWithResult(rowId, res) {
-  const statusEl    = document.getElementById('status-'    + rowId);
-  const sourceEl    = document.getElementById('source-'    + rowId);
-  const remainingEl = document.getElementById('remaining-' + rowId);
-  if (!statusEl) return;
-
-  if (res.possible) {
-    statusEl.innerHTML = `<span class="badge possible">✓ 가능</span>`;
-    const cls = res.type === 'store' ? 'store' : getWhClass(res.source);
-    sourceEl.innerHTML = `<span class="badge ${cls}">${res.source}</span>`;
-    if (remainingEl) {
-      remainingEl.innerHTML = res.remaining !== null
-        ? `<span style="font-family:var(--mono);font-size:11px;color:var(--gray2);">${res.remaining}개</span>`
-        : '—';
-    }
-  } else {
-    statusEl.innerHTML    = `<span class="badge impossible">✗ 불가</span>`;
-    sourceEl.innerHTML    = `<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>`;
-    if (remainingEl) remainingEl.innerHTML = '—';
   }
 }
 
@@ -880,25 +730,24 @@ function renderOrders(orders) {
 
   if (!orders.length) {
     document.getElementById('orders-loading').style.display = 'none';
+    document.getElementById('orders-table').style.display = 'none';
     document.getElementById('orders-empty').style.display = 'block';
+    document.getElementById('filter-count').textContent = '0건';
     return;
   }
+  document.getElementById('orders-empty').style.display = 'none';
 
   tbody.innerHTML = orders.map(o => {
-    const rowId = o['접수번호'] + '_' + o['상품코드'] + '_' + o['사이즈'];
-    const date  = o['접수일시'] ? String(o['접수일시']).slice(0,16) : '—';
-    // 이미 계산된 결과 있으면 바로 표시
-    const cached = orderResultCache[rowId];
-    const statusHtml = cached
-      ? (cached.possible
-          ? `<span class="badge possible">✓ 가능</span>`
-          : `<span class="badge impossible">✗ 불가</span>`)
-      : `<span class="badge checking">확인중</span>`;
-    const sourceHtml = cached?.possible
-      ? `<span class="badge ${cached.type === 'store' ? 'store' : getWhClass(cached.source)}">${cached.source}</span>`
-      : '—';
-    const remainHtml = cached?.possible && cached.remaining !== null
-      ? `<span style="font-family:var(--mono);font-size:11px;color:var(--gray2);">${cached.remaining}개</span>`
+    const date = o['접수일시'] ? String(o['접수일시']).slice(0,16) : '—';
+
+    const statusHtml = o._possible
+      ? `<span class="badge possible">✓ 가능</span>`
+      : `<span class="badge impossible">✗ 불가</span>`;
+    const sourceHtml = o._possible
+      ? `<span class="badge ${o._type === 'store' ? 'store' : getWhClass(o._source)}">${o._source}</span>`
+      : `<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>`;
+    const remainHtml = (o._possible && o._remaining !== null && o._remaining !== undefined)
+      ? `<span style="font-family:var(--mono);font-size:11px;color:var(--gray2);">${o._remaining}개</span>`
       : '—';
 
     return `
@@ -912,11 +761,11 @@ function renderOrders(orders) {
       <td class="td-mono">${o['색상코드'] || '—'}</td>
       <td class="td-mono">${o['사이즈'] || '—'}</td>
       <td class="td-mono" style="text-align:right;">${o['수량'] || 0}</td>
-      <td id="status-${rowId}">${statusHtml}</td>
-      <td id="source-${rowId}">${sourceHtml}</td>
-      <td id="remaining-${rowId}">${remainHtml}</td>
+      <td>${statusHtml}</td>
+      <td>${sourceHtml}</td>
+      <td>${remainHtml}</td>
       <td>
-        <button class="action-btn check-btn" onclick="openDetail('${rowId}', ${JSON.stringify(o).replace(/'/g,"&#39;")})">상세</button>
+        <button class="action-btn check-btn" onclick="openDetail(${o._idx})">상세</button>
       </td>
     </tr>`;
   }).join('');
@@ -924,22 +773,6 @@ function renderOrders(orders) {
   document.getElementById('orders-loading').style.display = 'none';
   document.getElementById('orders-table').style.display  = 'block';
   document.getElementById('filter-count').textContent = `${orders.length}건`;
-}
-
-function updateOrderRow(rowId, stockData) {
-  const statusEl = document.getElementById('status-' + rowId);
-  const sourceEl = document.getElementById('source-' + rowId);
-  if (!statusEl) return;
-
-  const r = stockData.result;
-  if (r.possible) {
-    statusEl.innerHTML = `<span class="badge possible">✓ 가능</span>`;
-    const cls = r.type === 'store' ? 'store' : (r.key || getWhClass(r.source));
-    sourceEl.innerHTML = `<span class="badge ${cls}">${r.source}</span>`;
-  } else {
-    statusEl.innerHTML = `<span class="badge impossible">✗ 불가</span>`;
-    sourceEl.innerHTML = `<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>`;
-  }
 }
 
 function getWhClass(source) {
@@ -954,20 +787,13 @@ function getWhClass(source) {
 
 function updateStats() {
   const total = allOrders.length;
-  let ok = 0, ng = 0, pending = 0;
-
-  allOrders.forEach(o => {
-    const key = `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`;
-    const s = stockCache[key];
-    if (!s) { pending++; }
-    else if (s.result.possible) { ok++; }
-    else { ng++; }
-  });
+  let ok = 0, ng = 0;
+  allOrders.forEach(o => { o._possible ? ok++ : ng++; });
 
   document.getElementById('stat-total').textContent   = total;
   document.getElementById('stat-ok').textContent      = ok;
   document.getElementById('stat-ng').textContent      = ng;
-  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('stat-pending').textContent = 0;
 }
 
 // ── FILTER ────────────────────────────────────────────────────────────────────
@@ -1000,14 +826,27 @@ function clearDateFilter() {
 }
 
 // ── ORDER DETAIL MODAL ────────────────────────────────────────────────────────
-function openDetail(rowId, order) {
-  const key = `${order['상품코드']}_${order['색상코드']}_${order['사이즈']}`;
-  const stock = stockCache[key];
+function openDetail(idx) {
+  const order = allOrders[idx];
+  if (!order) return;
+  const key   = `${String(order['상품코드']).trim()}_${String(order['색상코드']).trim()}_${String(order['사이즈']).trim()}`;
+  const raw   = stockCache[key];
+  // 서버에서 계산된 배분 결과 + 재고 상세를 조합
+  const stock = raw ? {
+    warehouse: raw.warehouse,
+    stores:    raw.stores,
+    result: {
+      possible:  order._possible,
+      source:    order._source,
+      type:      order._type,
+      storeName: order._type === 'store' ? order._source : null
+    }
+  } : null;
 
   document.getElementById('modal-title').textContent = `${order['접수번호']} — ${order['상품명']}`;
 
   let stockHtml = stock ? buildStockHtml(stock, order['수량']) :
-    `<div style="font-family:var(--mono);font-size:11px;color:var(--gray3);">재고 조회 중...</div>`;
+    `<div style="font-family:var(--mono);font-size:11px;color:var(--gray3);">재고 정보 없음 — 새로고침 후 다시 시도해주세요</div>`;
 
   // CSV 데이터 생성
   const csvRow = [
@@ -1256,10 +1095,10 @@ function renderStockResult(data, qty) {
 }
 
 // ── STOCK UPLOAD (물류재고) ───────────────────────────────────────────────────
-let whData = null, stData = null, ordData = null;
+let whData = null, stData = null;
 
 function setupDragDrop() {
-  ['wh-upload-zone','st-upload-zone','ord-upload-zone'].forEach(id => {
+  ['wh-upload-zone','st-upload-zone'].forEach(id => {
     const zone = document.getElementById(id);
     if (!zone) return;
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
@@ -1269,19 +1108,16 @@ function setupDragDrop() {
       const file = e.dataTransfer.files[0];
       if (!file) return;
       if (id === 'wh-upload-zone') readExcelFile(file, 'wh');
-      else if (id === 'st-upload-zone') readExcelFile(file, 'st');
-      else readExcelFile(file, 'ord');
+      else readExcelFile(file, 'st');
     });
   });
 }
 
 function handleWhFile(e)  { const f = e.target.files[0]; if (f) readExcelFile(f, 'wh'); }
 function handleStFile(e)  { const f = e.target.files[0]; if (f) readExcelFile(f, 'st'); }
-function handleOrdFile(e) { const f = e.target.files[0]; if (f) readExcelFile(f, 'ord'); }
 
 function handleWhPaste(e)  { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'wh'); }
 function handleStPaste(e)  { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'st'); }
-function handleOrdPaste(e) { e.preventDefault(); parsePasteData(e.clipboardData.getData('text'), 'ord'); }
 
 function readExcelFile(file, type) {
   if (!window.XLSX) {
@@ -1311,10 +1147,6 @@ function parsePasteData(text, type) {
 function processRawRows(rows, type) {
   if (!rows || rows.length < 2) {
     setStatus(type, '❌ 데이터가 없습니다', 'err'); return;
-  }
-
-  if (type === 'ord') {
-    processOrderRows(rows); return;
   }
 
   // 헤더 자동 탐색
@@ -1357,115 +1189,10 @@ function showStockPreview(headers, rows) {
 
 
 
-// ── ORDER UPLOAD ──────────────────────────────────────────────────────────────
-const ORDER_COLS = ['접수번호','접수일시','신청구분','소속','신청자','상품명','상품코드','색상코드','사이즈','수량','정상가','소계','수령인','연락처','주소','우편번호','배송방법','IO코드'];
-
-function processOrderRows(rows) {
-  // 헤더 찾기
-  let headerIdx = -1, colIdx = {};
-  for (let i = 0; i < Math.min(rows.length, 5); i++) {
-    const row = rows[i].map(v => String(v).trim());
-    if (row.includes('접수번호') && row.includes('상품코드')) {
-      headerIdx = i;
-      row.forEach((v, idx) => { colIdx[v] = idx; });
-      break;
-    }
-  }
-  // 헤더 없으면 첫 행을 헤더로
-  if (headerIdx === -1) {
-    colIdx = {};
-    ORDER_COLS.forEach((c, i) => { colIdx[c] = i; });
-    headerIdx = -1;
-  }
-
-  const dataRows = rows.slice(headerIdx + 1).filter(r => r.some(v => String(v).trim()));
-  ordData = dataRows.map(row => {
-    const obj = {};
-    ORDER_COLS.forEach(col => { obj[col] = row[colIdx[col] ?? ORDER_COLS.indexOf(col)] || ''; });
-    return obj;
-  }).filter(r => r['상품코드']);
-
-  if (!ordData.length) {
-    setStatus('ord', '❌ 유효한 데이터가 없습니다', 'err'); return;
-  }
-
-  setStatus('ord', `✓ ${ordData.length}건 인식됨`, 'ok');
-
-  // 테이블 렌더
-  document.getElementById('up-total').textContent   = ordData.length;
-  document.getElementById('up-ok').textContent      = '—';
-  document.getElementById('up-ng').textContent      = '—';
-  document.getElementById('up-pending').textContent = ordData.length;
-
-  document.getElementById('order-upload-tbody').innerHTML = ordData.map((o, i) => `
-    <tr id="up-row-${i}">
-      <td class="td-mono">${o['접수번호']||'—'}</td>
-      <td>${o['신청구분']||'—'}</td>
-      <td>${o['신청자']||'—'}</td>
-      <td class="td-name">${o['상품명']||'—'}</td>
-      <td class="td-code">${o['상품코드']||'—'}</td>
-      <td class="td-mono">${o['색상코드']||'—'}</td>
-      <td class="td-mono">${o['사이즈']||'—'}</td>
-      <td class="td-mono" style="text-align:right;">${o['수량']||0}</td>
-      <td id="up-status-${i}"><span class="badge checking">확인 전</span></td>
-      <td id="up-source-${i}">—</td>
-    </tr>`).join('');
-
-  document.getElementById('order-preview').style.display = 'block';
-}
-
-async function checkUploadedOrders() {
-  if (!ordData || !ordData.length) return;
-  let ok = 0, ng = 0;
-
-  document.getElementById('up-pending').textContent = ordData.length;
-  document.getElementById('up-ok').textContent      = '0';
-  document.getElementById('up-ng').textContent      = '0';
-
-  for (let i = 0; i < ordData.length; i++) {
-    const o   = ordData[i];
-    const key = `${o['상품코드']}_${o['색상코드']}_${o['사이즈']}`;
-    document.getElementById('up-status-'+i).innerHTML = '<span class="badge checking">확인중...</span>';
-
-    try {
-      let data = stockCache[key];
-      if (!data) {
-        const url = `${SCRIPT_URL}?action=check&code=${encodeURIComponent(o['상품코드'])}&colorCode=${encodeURIComponent(o['색상코드'])}&size=${encodeURIComponent(o['사이즈'])}&qty=${o['수량']||1}`;
-        const res = await fetch(url);
-        data = await res.json();
-        if (data.status === 'ok') stockCache[key] = data;
-      }
-
-      if (data?.result?.possible) {
-        ok++;
-        document.getElementById('up-status-'+i).innerHTML = '<span class="badge possible">✓ 가능</span>';
-        const cls = data.result.type === 'store' ? 'store' : getWhClass(data.result.source);
-        document.getElementById('up-source-'+i).innerHTML = `<span class="badge ${cls}">${data.result.source}</span>`;
-      } else {
-        ng++;
-        document.getElementById('up-status-'+i).innerHTML = '<span class="badge impossible">✗ 불가</span>';
-        document.getElementById('up-source-'+i).innerHTML = '<span style="font-family:var(--mono);font-size:10px;color:var(--gray4);">재고없음</span>';
-      }
-    } catch(e) {
-      ng++;
-      document.getElementById('up-status-'+i).innerHTML = `<span class="badge checking" title="${e.message}">조회실패</span>`;
-    }
-
-    const pending = ordData.length - ok - ng;
-    document.getElementById('up-ok').textContent      = ok;
-    document.getElementById('up-ng').textContent      = ng;
-    document.getElementById('up-pending').textContent = pending;
-  }
-}
 
 
-function clearOrderUpload() {
-  ordData = null;
-  document.getElementById('ord-paste-area').value = '';
-  document.getElementById('ord-file-input').value = '';
-  document.getElementById('order-preview').style.display = 'none';
-  setStatus('ord', '', '');
-}
+
+
 
 function setStatus(type, msg, cls) {
   const el = document.getElementById(type + '-status');
