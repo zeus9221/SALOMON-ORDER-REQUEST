@@ -543,12 +543,24 @@ function searchProd(id, q) {
   const drop = document.getElementById('pd'+id);
   if (!q || q.length < 1) { drop.classList.remove('open'); return; }
   const ql = q.toLowerCase();
-  const res = prodNames.filter(n => n.toLowerCase().includes(ql)).slice(0, 30);
+
+  // 영문명 + 한글명 동시 검색
+  const res = PRODUCTS.filter(p => {
+    if (p.name.toLowerCase().includes(ql)) return true;
+    // 한글명 검색: 색상 중 하나라도 krName에 검색어 포함
+    if (p.colors?.some(c => c.krName && c.krName.includes(q))) return true;
+    return false;
+  }).slice(0, 30).map(p => p.name);
+
   ddResults[id] = res;
   drop.innerHTML = res.length
-    ? res.map((n, i) => {
-        const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
-        return `<div class="dd-item" onmousedown="pickProdIdx(${id},${i})">${n.replace(re,'<mark>$1</mark>')}</div>`;
+    ? res.map((name, i) => {
+        const prod   = PRODUCTS.find(p => p.name === name);
+        const krName = prod?.colors?.[0]?.krName || '';
+        const re     = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+        const dispEn = name.replace(re,'<mark>$1</mark>');
+        const dispKr = krName ? `<span style="color:#999;font-size:11px;margin-left:6px;">${krName.replace(re,'<mark>$1</mark>')}</span>` : '';
+        return `<div class="dd-item" onmousedown="pickProdIdx(${id},${i})">${dispEn}${dispKr}</div>`;
       }).join('')
     : '<div class="dd-empty">검색 결과 없음</div>';
   drop.classList.add('open');
@@ -570,7 +582,8 @@ function pickProd(id, name) {
   document.getElementById('ps'+id).classList.add('chosen');
   document.getElementById('pd'+id).classList.remove('open');
   document.getElementById('pr'+id).classList.add('has-product');
-  document.getElementById('rl'+id).textContent = name;
+  const krName = prod.colors?.[0]?.krName || '';
+  document.getElementById('rl'+id).textContent = krName ? `${name} (${krName})` : name;
 
   // 색상 chips
   const cEl = document.getElementById('pc'+id);
@@ -793,7 +806,7 @@ const clearFields = ids => ids.forEach(id => { const el=document.getElementById(
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 // ── 데이터 로딩 ───────────────────────────────────────────────────────────────
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzfvtasCZ27C8vqLo5NQsKauVfK5c_S2a-FAfMmHxmkCHq4TiG0wOWvQ_HWAKjQ7A-tvQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWkPEuFQBqGsLxU2G5yPXC8ejk20zix8TC-zwSYfMuPgGj7wkAEFVwD11UK08UcMyhyA/exec';
 
 async function loadData() {
   document.getElementById('loading-overlay').style.display = 'flex';
